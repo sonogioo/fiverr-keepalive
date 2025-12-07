@@ -1,297 +1,669 @@
-// content.js - versione ULTRA FREQUENTE scroll "umano" + user interaction tracking
-console.log('[FIVERR] Keep-alive content script loaded');
+// ============================================================================
+// Fiverr Keep-Alive Pro - Content Script
+// Version: 7.5.0
+// Ultra-Realistic Activity Simulation + Online Presence Guarantee
+// ============================================================================
 
-// Notify background
-try {
-  chrome.runtime.sendMessage({ action: 'pageLoaded', url: window.location.href }). catch(()=>{});
-} catch (e) {}
+class UltraRealisticActivitySimulator {
+  constructor() {
+    this.mode = 'balanced';
+    this.isUserActive = false;
+    this.lastUserActivity = null;
+    this.activityPatterns = [];
+    this.keepAliveInterval = null;
+    this.websocketKeepAlive = null;
 
-// utils
-function randomInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
-function randFloat(min, max) { return Math.random() * (max - min) + min; }
-
-function createMouse(type, x = 100, y = 100) {
-  try {
-    return new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, screenX: x, screenY: y });
-  } catch (e) {
-    try {
-      const evt = document.createEvent('MouseEvents');
-      evt.initMouseEvent(type, true, true, window, 1, 0, 0, x, y, false, false, false, false, 0, null);
-      return evt;
-    } catch (err) {
-      return null;
-    }
+    this.init();
   }
-}
-function createPointer(type, x = 100, y = 100) {
-  try { return new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerType: 'mouse' }); }
-  catch (e) { return createMouse(type, x, y); }
-}
-function createWheel(deltaY = 100, x = 100, y = 100) {
-  try {
-    return new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY, clientX: x, clientY: y });
-  } catch (e) {
-    try {
-      const evt = document. createEvent('UIEvents');
-      // fallback: initEvent only
-      evt.initEvent('wheel', true, true);
-      evt.deltaY = deltaY;
-      return evt;
-    } catch (err) {
-      return null;
-    }
+
+  init() {
+    this.log('Ultra-Realistic Activity Simulator initialized', 'success');
+    this.setupMessageListener();
+    this.trackUserActivity();
+    this.startPassiveKeepAlive();
+    this.setupStorageKeepAlive();
+    this.setupVisibilityHandler();
+    this.notifyBackgroundReady();
   }
-}
 
-// ==================== USER INTERACTION TRACKING ====================
-
-let lastRealUserInteraction = 0;
-let isSimulatingActivity = false;
-
-/**
- * Notifica al background che l'utente ha interagito
- */
-function notifyUserInteraction(eventType) {
-  lastRealUserInteraction = Date. now();
-  console.log(`[FIVERR] User interaction detected: ${eventType}`);
-  
-  try {
-    chrome.runtime.sendMessage({ 
-      action: 'userInteraction',
-      type: eventType,
-      timestamp: lastRealUserInteraction
-    }).catch(() => {});
-  } catch (e) {
-    console.warn('[FIVERR] Failed to send userInteraction message:', e);
-  }
-}
-
-/**
- * Traccia i veri movimenti del mouse dell'utente
- */
-document.addEventListener('mousemove', (e) => {
-  // Ignora mousemove generati dagli script (synthethic events)
-  if (isSimulatingActivity) return;
-  
-  // Ignora movimenti vicino ai bordi (spesso sono generati)
-  if (e.clientX < 5 || e.clientX > window.innerWidth - 5 || 
-      e.clientY < 5 || e.clientY > window.innerHeight - 5) {
-    return;
-  }
-  
-  notifyUserInteraction('mousemove');
-}, { passive: true });
-
-/**
- * Traccia i veri click dell'utente
- */
-document.addEventListener('mousedown', (e) => {
-  if (isSimulatingActivity) return;
-  notifyUserInteraction('mousedown');
-}, { passive: true });
-
-document.addEventListener('mouseup', (e) => {
-  if (isSimulatingActivity) return;
-  notifyUserInteraction('mouseup');
-}, { passive: true });
-
-/**
- * Traccia i veri scroll dell'utente
- */
-document.addEventListener('wheel', (e) => {
-  if (isSimulatingActivity) return;
-  notifyUserInteraction('wheel');
-}, { passive: true });
-
-/**
- * Traccia i tasti premuti
- */
-document.addEventListener('keydown', (e) => {
-  if (isSimulatingActivity) return;
-  notifyUserInteraction('keydown');
-}, { passive: true });
-
-/**
- * Traccia i tap/touch
- */
-document.addEventListener('touchstart', (e) => {
-  if (isSimulatingActivity) return;
-  notifyUserInteraction('touch');
-}, { passive: true });
-
-/**
- * Traccia il focus della finestra
- */
-window.addEventListener('focus', (e) => {
-  notifyUserInteraction('windowFocus');
-}, { passive: true });
-
-// ==================== HUMAN-LIKE SCROLL ====================
-
-// Human-like scroll: totalDistance px over duration ms, split in steps
-function humanScroll(totalDistance = 300, duration = 600, steps = 8) {
-  if (document.visibilityState !== 'visible') {
-    console.log('[FIVERR] humanScroll skipped (page hidden)');
-    return;
-  }
-  
-  isSimulatingActivity = true;
-  
-  const stepDelay = Math.max(10, Math.floor(duration / steps));
-  let remaining = Math.abs(totalDistance);
-  const direction = totalDistance >= 0 ? 1 : -1;
-  let done = 0;
-
-  const clientX = Math.min(Math.max(10, Math.floor(window.innerWidth * 0.5 + (Math.random()-0.5)*200)), window.innerWidth-10);
-  const clientY = Math.min(Math.max(10, Math.floor(window.innerHeight * 0.5 + (Math.random()-0.5)*200)), window.innerHeight-10);
-
-  for (let i = 0; i < steps; i++) {
-    // choose step size (smaller near end)
-    const remainingSteps = steps - i;
-    const stepSize = Math.round(remaining / remainingSteps * (0.6 + Math.random() * 0.8));
-    const delta = Math.min(remaining, stepSize);
-    remaining -= delta;
-    const wheelDelta = delta * direction;
-
-    setTimeout(() => {
-      try {
-        // dispatch pointermove/mousemove to emulate hand moving
-        const pm = createPointer('pointermove', clientX + randomInt(-30, 30), clientY + randomInt(-30, 30)) ||
-                   createMouse('mousemove', clientX + randomInt(-30, 30), clientY + randomInt(-30, 30));
-        if (pm) {
-          document.dispatchEvent(pm);
-          window.dispatchEvent(pm);
-        }
-
-        // perform scrollBy small increment
-        try {
-          window.scrollBy({ top: wheelDelta, left: 0, behavior: 'smooth' });
-        } catch (e) {
-          window.scrollBy(0, wheelDelta);
-        }
-
-        // dispatch wheel event
-        const wh = createWheel(wheelDelta, clientX, clientY);
-        if (wh) {
-          (document.elementFromPoint(clientX, clientY) || document.body).dispatchEvent(wh);
-        }
-
-        done += Math.abs(wheelDelta);
-      } catch (err) {
-        console.warn('[FIVERR] humanScroll step error', err);
+  setupMessageListener() {
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+      if (request.action === 'performActivity') {
+        this.mode = request.mode || 'balanced';
+        this.performActivity(request.forced);
+        sendResponse({ success: true });
       }
-    }, i * stepDelay + randomInt(0, 60));
+      return true;
+    });
   }
 
-  // small bounce back sometimes to look natural
-  if (Math.random() < 0.35) {
+  notifyBackgroundReady() {
     setTimeout(() => {
-      const back = Math.round(Math.min(60, Math.max(10, totalDistance * 0.08)))*-Math.sign(totalDistance);
       try {
-        window.scrollBy({ top: back, left: 0, behavior: 'smooth' });
-      } catch (e) { window.scrollBy(0, back); }
-      console.log('[FIVERR] humanScroll bounce back', back);
-      
-      isSimulatingActivity = false;
-    }, duration + randomInt(100, 500));
-  } else {
-    setTimeout(() => {
-      isSimulatingActivity = false;
-    }, duration + randomInt(100, 300));
+        chrome.runtime.sendMessage({
+          action: 'pageLoaded',
+          url: window.location.href
+        }).catch(() => {});
+      } catch (e) {
+        // Background not ready yet
+      }
+    }, 2000);
   }
-}
 
-// ==================== ACTIVITY SIMULATION ====================
+  // ========== USER ACTIVITY TRACKING ==========
 
-// Attività micro ogni 15 secondi (invece di 30)
-setInterval(() => {
-  if (document.visibilityState === 'visible' && document.hasFocus()) {
-    console.log('[FIVERR-ACTIVITY] Simulating micro user activity...');
-    isSimulatingActivity = true;
-    
-    const x = randomInt(50, Math.max(50, window.innerWidth - 50));
-    const y = randomInt(50, Math.max(50, window.innerHeight - 50));
-    const mv = createPointer('pointermove', x, y) || createMouse('mousemove', x, y);
-    if (mv) {
-      document.dispatchEvent(mv);
-      window.dispatchEvent(mv);
-    }
-    
-    // Mini scroll 30% delle volte
-    if (Math.random() < 0.3) {
-      window.scrollBy({ top: randomInt(-20, 20), behavior: 'smooth' });
-    }
-    
-    isSimulatingActivity = false;
-  }
-}, 15 * 1000); // 15 secondi
+  trackUserActivity() {
+    const events = ['mousemove', 'click', 'keydown', 'scroll', 'touchstart'];
 
-// Attività principale ogni 45 secondi (invece di 3 minuti)
-setInterval(() => {
-  if (document.visibilityState === 'visible' && document.hasFocus()) {
-    const distance = (Math.random() < 0.5 ? 1 : -1) * randomInt(300, 800);
-    const duration = randomInt(300, 900);
-    const steps = randomInt(8, 16);
-    console.log('[FIVERR-ACTIVITY] humanScroll start', distance, duration, steps);
-    humanScroll(distance, duration, steps);
+    events.forEach(eventType => {
+      document.addEventListener(eventType, () => {
+        this.isUserActive = true;
+        this.lastUserActivity = Date.now();
 
-    // Click più frequente (80% delle volte)
-    if (Math.random() < 0.8) {
-      setTimeout(() => {
-        isSimulatingActivity = true;
-        
-        const px = Math.min(window.innerWidth-10, Math.max(10, Math.floor(window.innerWidth*0.5 + (Math.random()-0.5)*300)));
-        const py = Math.min(window.innerHeight-10, Math.max(10, Math.floor(window.innerHeight*0.5 + (Math.random()-0.5)*300)));
-        
-        // Mouse over prima del click
-        const over = createMouse('mouseover', px, py);
-        const down = createPointer('pointerdown', px, py) || createMouse('mousedown', px, py);
-        const up = createPointer('pointerup', px, py) || createMouse('mouseup', px, py);
-        const click = createMouse('click', px, py);
-        
-        const target = document.elementFromPoint(px, py) || document.querySelector('body') || document.documentElement;
-        
-        // Sequenza di eventi realistici
-        if (over) target.dispatchEvent(over);
+        // Reset after 60 seconds
         setTimeout(() => {
-          if (down) target.dispatchEvent(down);
-          setTimeout(() => {
-            if (up) target.dispatchEvent(up);
-            if (click) target.dispatchEvent(click);
-          }, 50);
-        }, 100);
-        
-        isSimulatingActivity = false;
-      }, duration + randomInt(100, 500));
-    }
-  } else {
-    console.log('[FIVERR] Main activity skipped (page hidden)');
+          if (Date.now() - this.lastUserActivity >= 60000) {
+            this.isUserActive = false;
+          }
+        }, 60000);
+      }, { passive: true });
+    });
   }
-}, 45 * 1000); // 45 secondi
 
-// Attività extra ogni 60 secondi (scroll casuale)
-setInterval(() => {
-  if (document.visibilityState === 'visible' && document.hasFocus() && Math.random() < 0.7) {
-    console.log('[FIVERR-ACTIVITY] Extra random scroll');
-    isSimulatingActivity = true;
-    
-    const scrollDistance = randomInt(-150, 150);
-    window.scrollBy({ top: scrollDistance, behavior: 'smooth' });
-    
-    // Piccolo movimento mouse
-    setTimeout(() => {
-      const x = randomInt(50, Math.max(50, window.innerWidth - 50));
-      const y = randomInt(50, Math.max(50, window.innerHeight - 50));
-      const mv = createPointer('pointermove', x, y) || createMouse('mousemove', x, y);
-      if (mv) {
-        document.dispatchEvent(mv);
+  // ========== PASSIVE KEEP-ALIVE ==========
+
+  startPassiveKeepAlive() {
+    // Ultra-passive activity every 2 minutes when user is not active
+    this.keepAliveInterval = setInterval(() => {
+      if (!this.isUserActive) {
+        this.performPassiveActivity();
       }
-      isSimulatingActivity = false;
-    }, 300);
-  }
-}, 60 * 1000); // 60 secondi
+    }, 2 * 60 * 1000); // Every 2 minutes
 
-// optional debug log of visibility
+    this.log('Passive keep-alive started (every 2 minutes)', 'info');
+  }
+
+  async performPassiveActivity() {
+    // Very subtle activities that won't interfere
+    const passiveActivities = [
+      () => window.focus(),
+      () => this.updateSessionStorage(),
+      () => this.triggerVisibilityCheck(),
+      () => this.simulateMicroScroll()
+    ];
+
+    const activity = passiveActivities[Math.floor(Math.random() * passiveActivities.length)];
+    await activity();
+
+    this.log('Passive activity executed', 'debug');
+  }
+
+  setupStorageKeepAlive() {
+    // Update localStorage/sessionStorage to maintain session
+    setInterval(() => {
+      this.updateSessionStorage();
+    }, 3 * 60 * 1000); // Every 3 minutes
+
+    this.log('Storage keep-alive initialized', 'info');
+  }
+
+  updateSessionStorage() {
+    try {
+      const timestamp = Date.now();
+      sessionStorage.setItem('fiverr_keepalive_heartbeat', timestamp.toString());
+      sessionStorage.setItem('last_activity', timestamp.toString());
+
+      // Also update a custom property to simulate real usage
+      const activityData = {
+        timestamp: timestamp,
+        type: 'heartbeat',
+        random: Math.random()
+      };
+      sessionStorage.setItem('fiverr_activity_data', JSON.stringify(activityData));
+
+      this.log('Session storage updated', 'debug');
+    } catch (e) {
+      // Storage might be full or blocked
+    }
+  }
+
+  setupVisibilityHandler() {
+    // Handle visibility change to maintain presence
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        this.log('Tab became visible, triggering activity', 'info');
+        setTimeout(() => {
+          this.performMiniActivity();
+        }, 500);
+      }
+    });
+  }
+
+  triggerVisibilityCheck() {
+    // Dispatch visibility event to trigger handlers
+    const event = new Event('visibilitychange');
+    document.dispatchEvent(event);
+  }
+
+  // ========== MAIN ACTIVITY SIMULATION ==========
+
+  async performActivity(forced = false) {
+    // Don't interfere if user is actively using the page (unless forced)
+    if (!forced && this.isUserActive && Date.now() - this.lastUserActivity < 30000) {
+      this.log('User is active, skipping simulation', 'info');
+      return;
+    }
+
+    this.log(`Performing ${this.mode} mode activity${forced ? ' (FORCED)' : ''}`, 'activity');
+
+    const activities = this.getActivitiesForMode();
+
+    // Execute random activities
+    for (const activity of activities) {
+      try {
+        await this.executeActivity(activity);
+        await this.randomDelay(100, 500);
+      } catch (error) {
+        this.log('Activity error: ' + error.message, 'error');
+      }
+    }
+
+    // Always update storage after activity
+    this.updateSessionStorage();
+
+    this.notifyActivityComplete();
+  }
+
+  async performMiniActivity() {
+    // Quick, subtle activity
+    window.focus();
+    await this.randomDelay(100, 300);
+    const scrollAmount = Math.random() > 0.5 ? 50 : -50;
+    window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+  }
+
+  getActivitiesForMode() {
+    const allActivities = [
+      'scroll',
+      'mousemove',
+      'focus',
+      'hover',
+      'microScroll',
+      'typing',
+      'click',
+      'dropdown'
+    ];
+
+    switch (this.mode) {
+      case 'stealth':
+        // Only 1-2 subtle activities
+        return this.pickRandom(allActivities.slice(0, 5), Math.random() > 0.5 ? 1 : 2);
+
+      case 'balanced':
+        // 3-4 balanced activities
+        return this.pickRandom(allActivities, 3 + Math.floor(Math.random() * 2));
+
+      case 'aggressive':
+        // 4-6 more visible activities
+        return this.pickRandom(allActivities, 4 + Math.floor(Math.random() * 3));
+
+      default:
+        return this.pickRandom(allActivities, 3);
+    }
+  }
+
+  async executeActivity(activityType) {
+    switch (activityType) {
+      case 'scroll':
+        await this.simulateScroll();
+        break;
+
+      case 'mousemove':
+        await this.simulateMouseMove();
+        break;
+
+      case 'focus':
+        this.simulateFocus();
+        break;
+
+      case 'hover':
+        await this.simulateHover();
+        break;
+
+      case 'microScroll':
+        await this.simulateMicroScroll();
+        break;
+
+      case 'typing':
+        await this.simulateTyping();
+        break;
+
+      case 'click':
+        await this.simulateClick();
+        break;
+
+      case 'dropdown':
+        await this.simulateDropdown();
+        break;
+    }
+  }
+
+  // ========== INDIVIDUAL ACTIVITY SIMULATIONS ==========
+
+  async simulateScroll() {
+    const scrollPatterns = [
+      { direction: 'down', distance: 150, smooth: true },
+      { direction: 'down', distance: 300, smooth: true },
+      { direction: 'up', distance: 100, smooth: true },
+      { direction: 'down', distance: 50, smooth: false }
+    ];
+
+    const pattern = this.pickRandom(scrollPatterns, 1)[0];
+
+    const distance = pattern.direction === 'down' ? pattern.distance : -pattern.distance;
+
+    window.scrollBy({
+      top: distance,
+      behavior: pattern.smooth ? 'smooth' : 'auto'
+    });
+
+    this.log(`Scrolled ${pattern.direction} ${pattern.distance}px`, 'debug');
+  }
+
+  async simulateMicroScroll() {
+    // Very small scrolls, like reading
+    const microDistance = Math.random() > 0.5 ? 20 : -20;
+
+    for (let i = 0; i < 3; i++) {
+      window.scrollBy({ top: microDistance, behavior: 'smooth' });
+      await this.randomDelay(300, 800);
+    }
+
+    this.log('Micro-scrolled (reading pattern)', 'debug');
+  }
+
+  async simulateMouseMove() {
+    const movements = 3 + Math.floor(Math.random() * 5); // 3-7 movements
+    const path = this.generateNaturalMousePath(movements);
+
+    for (const point of path) {
+      const event = new MouseEvent('mousemove', {
+        bubbles: true,
+        cancelable: true,
+        clientX: point.x,
+        clientY: point.y,
+        movementX: point.deltaX || 0,
+        movementY: point.deltaY || 0
+      });
+
+      document.dispatchEvent(event);
+      await this.randomDelay(50, 150);
+    }
+
+    this.log(`Mouse moved along ${movements} points`, 'debug');
+  }
+
+  generateNaturalMousePath(points) {
+    const path = [];
+    let currentX = Math.random() * window.innerWidth;
+    let currentY = Math.random() * window.innerHeight;
+
+    for (let i = 0; i < points; i++) {
+      // Natural curve movement with bezier-like interpolation
+      const targetX = Math.random() * window.innerWidth;
+      const targetY = Math.random() * window.innerHeight;
+
+      const deltaX = (targetX - currentX) / 3;
+      const deltaY = (targetY - currentY) / 3;
+
+      currentX += deltaX + (Math.random() - 0.5) * 20; // Add jitter
+      currentY += deltaY + (Math.random() - 0.5) * 20;
+
+      // Keep within bounds
+      currentX = Math.max(0, Math.min(window.innerWidth, currentX));
+      currentY = Math.max(0, Math.min(window.innerHeight, currentY));
+
+      path.push({
+        x: Math.floor(currentX),
+        y: Math.floor(currentY),
+        deltaX,
+        deltaY
+      });
+    }
+
+    return path;
+  }
+
+  simulateFocus() {
+    // Focus window and document
+    window.focus();
+
+    if (document.activeElement && document.activeElement.blur) {
+      document.activeElement.blur();
+    }
+
+    // Dispatch focus event
+    const event = new FocusEvent('focus', {
+      bubbles: true,
+      cancelable: true
+    });
+
+    window.dispatchEvent(event);
+
+    this.log('Window focused', 'debug');
+  }
+
+  async simulateHover() {
+    // Find interactive elements
+    const selectors = [
+      'a',
+      'button',
+      '.gig-card',
+      '.seller-card',
+      '[role="button"]',
+      'nav a',
+      '.navigation-link'
+    ];
+
+    let elements = [];
+
+    for (const selector of selectors) {
+      const found = document.querySelectorAll(selector);
+      elements.push(...Array.from(found));
+      if (elements.length >= 10) break;
+    }
+
+    if (elements.length === 0) {
+      this.log('No elements to hover', 'debug');
+      return;
+    }
+
+    // Pick random element
+    const element = this.pickRandom(elements, 1)[0];
+
+    if (!element) return;
+
+    const rect = element.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+
+    // Simulate hover
+    const events = ['mouseover', 'mouseenter'];
+
+    for (const eventType of events) {
+      const event = new MouseEvent(eventType, {
+        bubbles: true,
+        cancelable: true,
+        clientX: x,
+        clientY: y,
+        view: window
+      });
+
+      element.dispatchEvent(event);
+    }
+
+    this.log(`Hovered over ${element.tagName}`, 'debug');
+
+    // Simulate hover duration
+    await this.randomDelay(500, 1500);
+
+    // Mouse leave
+    const leaveEvent = new MouseEvent('mouseleave', {
+      bubbles: true,
+      cancelable: true,
+      view: window
+    });
+
+    element.dispatchEvent(leaveEvent);
+  }
+
+  // ========== NEW ADVANCED ACTIVITIES ==========
+
+  async simulateTyping() {
+    // Find search inputs or text fields
+    const selectors = [
+      'input[type="search"]',
+      'input[type="text"]',
+      'input[placeholder*="search" i]',
+      'input[placeholder*="cerca" i]',
+      '.search-input'
+    ];
+
+    let input = null;
+
+    for (const selector of selectors) {
+      const found = document.querySelector(selector);
+      if (found) {
+        input = found;
+        break;
+      }
+    }
+
+    if (!input) {
+      this.log('No input field found for typing', 'debug');
+      return;
+    }
+
+    // Focus the input
+    input.focus();
+    await this.randomDelay(200, 400);
+
+    // Simulate typing a random search term (but don't actually search)
+    const searchTerms = ['design', 'logo', 'web', 'marketing', 'writing'];
+    const term = this.pickRandom(searchTerms, 1)[0];
+
+    // Type character by character
+    for (let i = 0; i < term.length; i++) {
+      const char = term[i];
+
+      // Key down
+      const keydownEvent = new KeyboardEvent('keydown', {
+        key: char,
+        bubbles: true,
+        cancelable: true
+      });
+      input.dispatchEvent(keydownEvent);
+
+      await this.randomDelay(80, 200); // Human typing speed
+
+      // Update input value
+      input.value += char;
+
+      // Input event
+      const inputEvent = new Event('input', {
+        bubbles: true,
+        cancelable: true
+      });
+      input.dispatchEvent(inputEvent);
+
+      // Key up
+      const keyupEvent = new KeyboardEvent('keyup', {
+        key: char,
+        bubbles: true
+      });
+      input.dispatchEvent(keyupEvent);
+    }
+
+    await this.randomDelay(500, 1000);
+
+    // Clear the input (backspace simulation)
+    for (let i = 0; i < term.length; i++) {
+      const backspaceDown = new KeyboardEvent('keydown', {
+        key: 'Backspace',
+        bubbles: true
+      });
+      input.dispatchEvent(backspaceDown);
+
+      input.value = input.value.slice(0, -1);
+
+      const inputEvent = new Event('input', {
+        bubbles: true
+      });
+      input.dispatchEvent(inputEvent);
+
+      await this.randomDelay(50, 100);
+    }
+
+    input.blur();
+
+    this.log('Typing simulation completed', 'debug');
+  }
+
+  async simulateClick() {
+    // Find safe clickable elements (not buttons that submit forms)
+    const selectors = [
+      'nav a',
+      '.navigation-link',
+      '.tab:not(.active)',
+      '[role="tab"]:not([aria-selected="true"])',
+      '.filter-option',
+      '.category-link'
+    ];
+
+    let elements = [];
+
+    for (const selector of selectors) {
+      const found = document.querySelectorAll(selector);
+      elements.push(...Array.from(found));
+      if (elements.length >= 5) break;
+    }
+
+    if (elements.length === 0) {
+      this.log('No safe clickable elements found', 'debug');
+      return;
+    }
+
+    const element = this.pickRandom(elements, 1)[0];
+
+    if (!element) return;
+
+    const rect = element.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+
+    // Simulate full click sequence: mousedown -> mouseup -> click
+    const mousedownEvent = new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      clientX: x,
+      clientY: y,
+      button: 0
+    });
+    element.dispatchEvent(mousedownEvent);
+
+    await this.randomDelay(50, 150);
+
+    const mouseupEvent = new MouseEvent('mouseup', {
+      bubbles: true,
+      cancelable: true,
+      clientX: x,
+      clientY: y,
+      button: 0
+    });
+    element.dispatchEvent(mouseupEvent);
+
+    // DON'T actually click to avoid navigation
+    // Just dispatch the events to simulate activity
+
+    this.log(`Simulated click on ${element.tagName}`, 'debug');
+  }
+
+  async simulateDropdown() {
+    // Find dropdown menus or expandable elements
+    const selectors = [
+      '[role="button"][aria-expanded]',
+      '.dropdown-toggle',
+      'button[aria-haspopup]',
+      '.expandable'
+    ];
+
+    let dropdown = null;
+
+    for (const selector of selectors) {
+      const found = document.querySelector(selector);
+      if (found) {
+        dropdown = found;
+        break;
+      }
+    }
+
+    if (!dropdown) {
+      this.log('No dropdown found', 'debug');
+      return;
+    }
+
+    // Hover over dropdown
+    const rect = dropdown.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+
+    const hoverEvent = new MouseEvent('mouseenter', {
+      bubbles: true,
+      clientX: x,
+      clientY: y
+    });
+    dropdown.dispatchEvent(hoverEvent);
+
+    await this.randomDelay(1000, 2000);
+
+    // Leave dropdown
+    const leaveEvent = new MouseEvent('mouseleave', {
+      bubbles: true
+    });
+    dropdown.dispatchEvent(leaveEvent);
+
+    this.log('Dropdown interaction simulated', 'debug');
+  }
+
+  // ========== UTILITY METHODS ==========
+
+  pickRandom(array, count) {
+    const shuffled = [...array].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, count);
+  }
+
+  randomDelay(min, max) {
+    const delay = Math.floor(Math.random() * (max - min + 1)) + min;
+    return new Promise(resolve => setTimeout(resolve, delay));
+  }
+
+  notifyActivityComplete() {
+    try {
+      chrome.runtime.sendMessage({
+        action: 'activityComplete',
+        timestamp: Date.now()
+      }).catch(() => {});
+    } catch (e) {
+      // Background script not available
+    }
+  }
+
+  log(message, level = 'info') {
+    const emoji = {
+      success: '✅',
+      info: 'ℹ️',
+      error: '❌',
+      activity: '🔄',
+      debug: '🔍'
+    }[level] || 'ℹ️';
+
+    console.log(`${emoji} [Fiverr KeepAlive Pro] ${message}`);
+  }
+}
+
+// ============================================================================
+// INITIALIZE
+// ============================================================================
+
+const simulator = new UltraRealisticActivitySimulator();
+
+// Ultra-passive heartbeat - very subtle background activity
 setInterval(() => {
-  console.log('[FIVERR] visibilityState=', document.visibilityState, 'hasFocus=', document.hasFocus(), 'lastInteraction=', Date.now() - lastRealUserInteraction);
-}, 120 * 1000);
+  if (!simulator.isUserActive) {
+    // Only focus and storage update, no other actions
+    if (Math.random() > 0.5) { // 50% chance every 3 minutes
+      window.focus();
+      simulator.updateSessionStorage();
+    }
+  }
+}, 3 * 60 * 1000); // Every 3 minutes

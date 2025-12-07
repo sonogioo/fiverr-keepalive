@@ -1,444 +1,563 @@
-// background.js v4.2 - FREQUENT ACTIVITY VERSION
-let isEnabled = false;
-let keepAliveTabId = null;
-let lastUserInteractionTime = 0;
-let pageChangeInProgress = false;
+// ============================================================================
+// Fiverr Keep-Alive Pro - Background Service Worker
+// Version: 7.0.0
+// Architecture: Modular, Event-Driven, Production-Ready
+// ============================================================================
 
-const FIVERR_PAGES = [
-  'https://www.fiverr.com/',
-  'https://www.fiverr.com/inbox',
-  'https://www.fiverr.com/dashboard',
-  'https://www.fiverr.com/users/giovannihany/manage_gigs'
-];
+class FiverrKeepAlivePro {
+  constructor() {
+    this.config = {
+      enabled: false,
+      mode: 'balanced', // stealth | balanced | aggressive
+      customInterval: null,
+      notifications: true,
+      autoRestart: true,
+      smartRotation: true
+    };
 
-let currentPageIndex = 0;
+    this.state = {
+      tabId: null,
+      currentPageIndex: 0,
+      lastActivity: null,
+      activitiesCount: 0,
+      errors: 0,
+      uptime: 0,
+      startTime: null,
+      tabCrashes: 0
+    };
 
-// ==================== INSTALLATION ====================
+    this.intervals = {
+      activity: null,
+      rotation: null,
+      heartbeat: null,
+      stats: null
+    };
 
-chrome.runtime.onInstalled.addListener(() => {
-  console.log('[KEEP-ALIVE] Extension installed');
-  
-  chrome.storage.sync.get(['alwaysOnline'], (result) => {
-    if (result.alwaysOnline) {
-      startKeepAlive();
-    }
-  });
-});
+    this.pages = [
+      'https://www.fiverr.com/',
+      'https://www.fiverr.com/inbox',
+      'https://www.fiverr.com/dashboard',
+      'https://www.fiverr.com/sellers'
+    ];
 
-chrome.runtime.onStartup.addListener(() => {
-  console.log('[KEEP-ALIVE] Browser started');
-  
-  chrome.storage.sync.get(['alwaysOnline'], (result) => {
-    if (result.alwaysOnline) {
-      startKeepAlive();
-    }
-  });
-});
+    // Activity intervals based on mode (in milliseconds)
+    this.modeSettings = {
+      stealth: {
+        activityInterval: [45000, 90000], // Random between 45s-90s
+        rotationInterval: 8 * 60 * 1000,  // 8 minutes
+        description: 'Modalità stealth - Attività poco frequenti e randomizzate'
+      },
+      balanced: {
+        activityInterval: [25000, 45000], // Random between 25s-45s
+        rotationInterval: 5 * 60 * 1000,  // 5 minutes
+        description: 'Modalità bilanciata - Equilibrio tra efficacia e discrezione'
+      },
+      aggressive: {
+        activityInterval: [15000, 30000], // Random between 15s-30s
+        rotationInterval: 3 * 60 * 1000,  // 3 minutes
+        description: 'Modalità aggressiva - Massima presenza online'
+      }
+    };
 
-// ==================== MESSAGE LISTENER ====================
-
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'toggleKeepAlive') {
-    if (request.enabled) {
-      startKeepAlive();
-      sendResponse({ success: true, message: 'Keep-alive started' });
-    } else {
-      stopKeepAlive();
-      sendResponse({ success: true, message: 'Keep-alive stopped' });
-    }
-  } else if (request.action === 'userInteraction') {
-    // Traccia l'interazione dell'utente
-    lastUserInteractionTime = Date.now();
-    console.log('[KEEP-ALIVE] User interaction detected');
+    this.init();
   }
-  return true;
-});
 
-// ==================== KEEP-ALIVE CORE ====================
+  // ========== INITIALIZATION ==========
 
-async function startKeepAlive() {
-  console.log('[KEEP-ALIVE] Starting...');
-  isEnabled = true;
-  pageChangeInProgress = false;
-  lastUserInteractionTime = 0;
-  
-  // Salva stato
-  chrome.storage.sync.set({ alwaysOnline: true });
-  
-  // Crea tab nascosta di Fiverr
-  await createKeepAliveTab();
-  
-  // ATTIVITÀ OGNI 30 SECONDI (invece di 3 minuti)
-  chrome.alarms.create('activitySimulation', {
-    delayInMinutes: 0.5, // 30 secondi
-    periodInMinutes: 0.5 // 30 secondi
-  });
-  
-  // CAMBIO PAGINA OGNI 3 MINUTI (invece di 15)
-  chrome.alarms.create('pageRotation', {
-    delayInMinutes: 3,
-    periodInMinutes: 3
-  });
-  
-  // ATTIVITÀ AGGIUNTIVA OGNI 10 SECONDI (mouse move)
-  chrome.alarms.create('microActivity', {
-    delayInMinutes: 0.17, // 10 secondi
-    periodInMinutes: 0.17 // 10 secondi
-  });
-  
-  // Badge verde
-  chrome.action.setBadgeText({ text: 'ON' });
-  chrome.action.setBadgeBackgroundColor({ color: '#1dbf73' });
-  
-  console.log('[KEEP-ALIVE] Started successfully');
-}
-
-async function stopKeepAlive() {
-  console.log('[KEEP-ALIVE] Stopping...');
-  isEnabled = false;
-  pageChangeInProgress = false;
-  
-  // Salva stato
-  chrome.storage.sync.set({ alwaysOnline: false });
-  
-  // Chiudi tab
-  if (keepAliveTabId) {
-    chrome.tabs.remove(keepAliveTabId).catch(() => {});
-    keepAliveTabId = null;
+  init() {
+    this.log('Initializing Fiverr Keep-Alive Pro...', 'system');
+    this.loadSettings();
+    this.setupListeners();
+    this.updateBadge();
   }
-  
-  // Ferma alarms
-  chrome.alarms.clear('activitySimulation');
-  chrome.alarms.clear('pageRotation');
-  chrome.alarms.clear('microActivity'); // Aggiunto
-  
-  // Badge off
-  chrome.action.setBadgeText({ text: '' });
-  
-  console.log('[KEEP-ALIVE] Stopped');
-}
 
-async function createKeepAliveTab() {
-  try {
-    // Chiudi tab esistente se presente
-    if (keepAliveTabId) {
-      chrome.tabs.remove(keepAliveTabId).catch(() => {});
+  async loadSettings() {
+    try {
+      const data = await chrome.storage.sync.get(['keepAliveConfig', 'keepAliveState']);
+
+      if (data.keepAliveConfig) {
+        this.config = { ...this.config, ...data.keepAliveConfig };
+      }
+
+      if (this.config.enabled) {
+        this.log('Auto-starting from saved settings', 'info');
+        await this.start();
+      }
+    } catch (error) {
+      this.log('Error loading settings: ' + error.message, 'error');
     }
-    
-    // Crea nuova tab NASCOSTA (pinned + muted)
-    const tab = await chrome.tabs.create({
-      url: FIVERR_PAGES[0],
-      active: false,
-      pinned: true
-    });
-    
-    keepAliveTabId = tab.id;
-    
-    // Muta l'audio della tab
-    chrome.tabs.update(keepAliveTabId, { muted: true });
-    
-    console.log(`[KEEP-ALIVE] Tab created: ${keepAliveTabId}`);
-    
-    // Aspetta che carichi
-    return new Promise((resolve) => {
-      chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
-        if (tabId === keepAliveTabId && info.status === 'complete') {
-          chrome.tabs.onUpdated.removeListener(listener);
-          console.log('[KEEP-ALIVE] Tab loaded');
-          resolve();
-        }
+  }
+
+  async saveSettings() {
+    try {
+      await chrome.storage.sync.set({
+        keepAliveConfig: this.config,
+        keepAliveState: this.state
       });
-      
-      // Timeout di sicurezza dopo 10 secondi
-      setTimeout(resolve, 10000);
-    });
-    
-  } catch (error) {
-    console.error('[KEEP-ALIVE] Error creating tab:', error);
-  }
-}
-
-// ==================== TAB RECOVERY ====================
-
-async function recoverKeepAliveTab() {
-  if (!isEnabled) return;
-  
-  console.log('[KEEP-ALIVE] Attempting tab recovery...');
-  
-  try {
-    // Prima cerca se esiste già una tab di Fiverr
-    const tabs = await chrome.tabs.query({ url: '*://*.fiverr.com/*' });
-    
-    if (tabs.length > 0) {
-      // Usa una tab esistente
-      const existingTab = tabs[0];
-      keepAliveTabId = existingTab.id;
-      
-      // Muta e pinna se non lo è già
-      await chrome.tabs.update(keepAliveTabId, { 
-        muted: true,
-        pinned: true
-      });
-      
-      console.log('[KEEP-ALIVE] Recovered existing tab:', keepAliveTabId);
-    } else {
-      // Crea nuova tab
-      await createKeepAliveTab();
+    } catch (error) {
+      this.log('Error saving settings: ' + error.message, 'error');
     }
-  } catch (error) {
-    console.error('[KEEP-ALIVE] Recovery failed, creating new tab:', error);
-    await createKeepAliveTab();
   }
-}
 
-// ==================== ACTIVITY SIMULATION ====================
-
-async function simulateActivity() {
-  if (!isEnabled || !keepAliveTabId || pageChangeInProgress) return;
-  
-  // Ridotto da 2 minuti a 30 secondi
-  const timeSinceLastInteraction = Date.now() - lastUserInteractionTime;
-  if (timeSinceLastInteraction < 30000) { // 30 secondi
-    console.log('[KEEP-ALIVE] User active, skipping activity simulation');
-    return;
-  }
-  
-  console.log('[KEEP-ALIVE] Simulating activity...');
-  
-  try {
-    // Verifica che la tab esista ancora
-    const tab = await chrome.tabs.get(keepAliveTabId);
-    
-    if (!tab) {
-      console.log('[KEEP-ALIVE] Tab lost, recreating...');
-      await createKeepAliveTab();
-      return;
-    }
-    
-    // Inietta script di attività aggressive
-    await chrome.scripting.executeScript({
-      target: { tabId: keepAliveTabId },
-      func: performAggressiveActivity
+  setupListeners() {
+    // Message listener
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+      this.handleMessage(request, sender, sendResponse);
+      return true; // Keep channel open for async response
     });
-    
-    console.log('[KEEP-ALIVE] Activity simulated ✓');
-    
-  } catch (error) {
-    console.error('[KEEP-ALIVE] Error simulating activity:', error);
-    // Ricrea tab se errore
-    await createKeepAliveTab();
-  }
-}
 
-// Funzione per micro attività (ogni 10 secondi)
-async function simulateMicroActivity() {
-  if (!isEnabled || !keepAliveTabId || pageChangeInProgress) return;
-  
-  console.log('[KEEP-ALIVE] Simulating micro activity...');
-  
-  try {
-    const tab = await chrome.tabs.get(keepAliveTabId);
-    
-    if (!tab) return;
-    
-    await chrome.scripting.executeScript({
-      target: { tabId: keepAliveTabId },
-      func: performMicroActivity
+    // Tab removed listener
+    chrome.tabs.onRemoved.addListener((tabId) => {
+      this.handleTabRemoved(tabId);
     });
-    
-  } catch (error) {
-    console.error('[KEEP-ALIVE] Micro activity error:', error);
-  }
-}
 
-// Funzione per attività aggressive (ogni 30 secondi)
-function performAggressiveActivity() {
-  console.log('[FIVERR-ACTIVITY] Simulating AGGRESSIVE activity...');
-  
-  // 1. Scroll significativo
-  const scrollAmount = Math.random() * 800 + 200;
-  window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
-  
-  setTimeout(() => {
-    window.scrollBy({ top: -scrollAmount / 3, behavior: 'smooth' });
-  }, 500);
-  
-  // 2. Multipli movimenti mouse
-  for (let i = 0; i < 3; i++) {
-    setTimeout(() => {
-      const mouseMoveEvent = new MouseEvent('mousemove', {
-        view: window,
-        bubbles: true,
-        cancelable: true,
-        clientX: Math.random() * window.innerWidth,
-        clientY: Math.random() * window.innerHeight
-      });
-      document.dispatchEvent(mouseMoveEvent);
-    }, i * 300);
-  }
-  
-  // 3. Click multipli
-  setTimeout(() => {
-    const clickEvent = new MouseEvent('click', {
-      view: window,
-      bubbles: true,
-      cancelable: true
-    });
-    document.body.dispatchEvent(clickEvent);
-    
-    // Click su elementi comuni
-    const commonElements = ['a', 'button', 'div', 'span'];
-    commonElements.forEach(selector => {
-      const elements = document.querySelectorAll(selector);
-      if (elements.length > 0) {
-        const randomElement = elements[Math.floor(Math.random() * elements.length)];
-        if (randomElement && randomElement.getBoundingClientRect().top < window.innerHeight) {
-          randomElement.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-        }
+    // Tab crash detection
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+      if (tabId === this.state.tabId && changeInfo.status === 'complete') {
+        this.log('Tab loaded successfully', 'success');
       }
     });
-  }, 1000);
-  
-  // 4. Keyboard activity
-  setTimeout(() => {
-    const keys = ['Tab', 'Shift', 'Control', 'Alt', 'ArrowDown', 'ArrowUp'];
-    const randomKey = keys[Math.floor(Math.random() * keys.length)];
-    const keyEvent = new KeyboardEvent('keydown', {
-      key: randomKey,
-      bubbles: true
+  }
+
+  // ========== MESSAGE HANDLER ==========
+
+  async handleMessage(request, sender, sendResponse) {
+    const { action } = request;
+
+    try {
+      switch (action) {
+        case 'start':
+          await this.start();
+          sendResponse({ success: true, state: this.getState() });
+          break;
+
+        case 'stop':
+          await this.stop();
+          sendResponse({ success: true, state: this.getState() });
+          break;
+
+        case 'getState':
+          sendResponse({ success: true, state: this.getState() });
+          break;
+
+        case 'updateConfig':
+          await this.updateConfig(request.config);
+          sendResponse({ success: true, config: this.config });
+          break;
+
+        case 'resetStats':
+          this.resetStats();
+          sendResponse({ success: true });
+          break;
+
+        case 'forceActivity':
+          await this.performActivity(true); // Force execution even if disabled
+          sendResponse({ success: true });
+          break;
+
+        case 'forceRotation':
+          await this.rotatePage();
+          sendResponse({ success: true });
+          break;
+
+        case 'activityComplete':
+          this.state.activitiesCount++;
+          this.state.lastActivity = Date.now();
+          await this.saveSettings();
+          sendResponse({ success: true });
+          break;
+
+        default:
+          sendResponse({ success: false, error: 'Unknown action' });
+      }
+    } catch (error) {
+      this.log('Error handling message: ' + error.message, 'error');
+      sendResponse({ success: false, error: error.message });
+    }
+  }
+
+  // ========== CORE FUNCTIONALITY ==========
+
+  async start() {
+    if (this.config.enabled) {
+      this.log('Already running', 'warn');
+      return;
+    }
+
+    this.log('Starting Keep-Alive Pro...', 'system');
+
+    this.config.enabled = true;
+    this.state.startTime = Date.now();
+    this.state.errors = 0;
+    this.state.tabCrashes = 0;
+
+    await this.saveSettings();
+
+    // Create monitoring tab
+    await this.createTab();
+
+    // Start activity intervals
+    this.startActivityLoop();
+    this.startRotationLoop();
+    this.startHeartbeat();
+    this.startStatsUpdater();
+
+    this.updateBadge();
+    this.log('Keep-Alive Pro started successfully', 'success');
+  }
+
+  async stop() {
+    if (!this.config.enabled) {
+      this.log('Already stopped', 'warn');
+      return;
+    }
+
+    this.log('Stopping Keep-Alive Pro...', 'system');
+
+    this.config.enabled = false;
+
+    // Clear all intervals
+    Object.keys(this.intervals).forEach(key => {
+      if (this.intervals[key]) {
+        clearInterval(this.intervals[key]);
+        clearTimeout(this.intervals[key]);
+        this.intervals[key] = null;
+      }
     });
-    document.dispatchEvent(keyEvent);
-  }, 1500);
-  
-  // 5. Focus e blur per simulare attenzione
-  setTimeout(() => {
-    window.focus();
-    document.hasFocus() && document.dispatchEvent(new Event('focus'));
-  }, 2000);
-  
-  console.log('[FIVERR-ACTIVITY] Aggressive activity complete');
-}
 
-// Funzione per micro attività (ogni 10 secondi)
-function performMicroActivity() {
-  // Solo movimenti minimi per mantenere attivo
-  const mouseMoveEvent = new MouseEvent('mousemove', {
-    view: window,
-    bubbles: true,
-    cancelable: true,
-    clientX: Math.random() * window.innerWidth,
-    clientY: Math.random() * window.innerHeight
-  });
-  document.dispatchEvent(mouseMoveEvent);
-  
-  // Mini scroll occasionalmente
-  if (Math.random() > 0.7) {
-    window.scrollBy({ top: Math.random() * 50 - 25, behavior: 'smooth' });
-  }
-}
+    // Close tab
+    if (this.state.tabId) {
+      try {
+        await chrome.tabs.remove(this.state.tabId);
+      } catch (error) {
+        this.log('Tab already closed', 'info');
+      }
+      this.state.tabId = null;
+    }
 
-async function rotatePage() {
-  if (!isEnabled || !keepAliveTabId) return;
-  
-  // Ridotto da 5 minuti a 1 minuto
-  const timeSinceLastInteraction = Date.now() - lastUserInteractionTime;
-  if (timeSinceLastInteraction < 60000) { // 1 minuto
-    console.log('[KEEP-ALIVE] User recently active, skipping page rotation');
-    return;
+    await this.saveSettings();
+    this.updateBadge();
+    this.log('Keep-Alive Pro stopped successfully', 'success');
   }
-  
-  // Evita rotazioni simultanee
-  if (pageChangeInProgress) {
-    console.log('[KEEP-ALIVE] Page rotation already in progress, skipping');
-    return;
+
+  async createTab() {
+    try {
+      // Close existing tab if any
+      if (this.state.tabId) {
+        try {
+          await chrome.tabs.remove(this.state.tabId);
+        } catch (e) {
+          // Tab already closed
+        }
+      }
+
+      // Create new tab
+      const tab = await chrome.tabs.create({
+        url: this.pages[0],
+        active: false,
+        pinned: false
+      });
+
+      this.state.tabId = tab.id;
+      this.log(`Tab created: ${tab.id}`, 'success');
+
+      // Wait for tab to load
+      await this.waitForTabLoad(tab.id);
+
+    } catch (error) {
+      this.state.errors++;
+      this.log('Error creating tab: ' + error.message, 'error');
+
+      if (this.config.autoRestart) {
+        this.log('Auto-restart in 10 seconds...', 'info');
+        setTimeout(() => this.createTab(), 10000);
+      }
+    }
   }
-  
-  pageChangeInProgress = true;
-  console.log('[KEEP-ALIVE] Rotating page...');
-  
-  try {
-    // Cambia pagina
-    currentPageIndex = (currentPageIndex + 1) % FIVERR_PAGES.length;
-    const newUrl = FIVERR_PAGES[currentPageIndex];
-    
-    await chrome.tabs.update(keepAliveTabId, { url: newUrl });
-    
-    console.log(`[KEEP-ALIVE] Navigated to: ${newUrl}`);
-    
-    // Aspetta il caricamento prima di permettere altre rotazioni
-    await new Promise((resolve) => {
-      const listener = (tabId, info) => {
-        if (tabId === keepAliveTabId && info.status === 'complete') {
-          chrome.tabs.onUpdated.removeListener(listener);
-          console.log('[KEEP-ALIVE] New page loaded, resuming activity');
-          pageChangeInProgress = false;
-          resolve();
+
+  async waitForTabLoad(tabId, timeout = 15000) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error('Tab load timeout'));
+      }, timeout);
+
+      const checkTab = async () => {
+        try {
+          const tab = await chrome.tabs.get(tabId);
+          if (tab.status === 'complete') {
+            clearTimeout(timer);
+            resolve(tab);
+          } else {
+            setTimeout(checkTab, 500);
+          }
+        } catch (error) {
+          clearTimeout(timer);
+          reject(error);
         }
       };
-      chrome.tabs.onUpdated.addListener(listener);
-      
-      // Timeout di sicurezza ridotto
-      setTimeout(() => {
-        chrome.tabs.onUpdated.removeListener(listener);
-        pageChangeInProgress = false;
-        resolve();
-      }, 10000);
+
+      checkTab();
     });
-    
-  } catch (error) {
-    console.error('[KEEP-ALIVE] Error rotating page:', error);
-    pageChangeInProgress = false;
-    await createKeepAliveTab();
+  }
+
+  // ========== ACTIVITY LOOPS ==========
+
+  startActivityLoop() {
+    const performActivityWithRandomDelay = () => {
+      const settings = this.modeSettings[this.config.mode];
+      const [min, max] = settings.activityInterval;
+      const delay = Math.floor(Math.random() * (max - min + 1)) + min;
+
+      this.intervals.activity = setTimeout(async () => {
+        if (this.config.enabled) {
+          await this.performActivity();
+          performActivityWithRandomDelay(); // Schedule next activity
+        }
+      }, delay);
+
+      this.log(`Next activity in ${(delay / 1000).toFixed(1)}s`, 'debug');
+    };
+
+    performActivityWithRandomDelay();
+  }
+
+  startRotationLoop() {
+    const settings = this.modeSettings[this.config.mode];
+    const interval = settings.rotationInterval;
+
+    this.intervals.rotation = setInterval(async () => {
+      if (this.config.enabled && this.config.smartRotation) {
+        await this.rotatePage();
+      }
+    }, interval);
+
+    this.log(`Page rotation every ${interval / 60000} minutes`, 'info');
+  }
+
+  startHeartbeat() {
+    // Heartbeat every 30 seconds to monitor tab health
+    this.intervals.heartbeat = setInterval(async () => {
+      if (!this.config.enabled) return;
+
+      try {
+        const tab = await chrome.tabs.get(this.state.tabId);
+
+        if (!tab || tab.discarded) {
+          this.log('Tab discarded or missing, recreating...', 'warn');
+          this.state.tabCrashes++;
+          await this.createTab();
+        }
+      } catch (error) {
+        this.log('Heartbeat check failed, recreating tab...', 'error');
+        this.state.tabCrashes++;
+        await this.createTab();
+      }
+    }, 30000);
+  }
+
+  startStatsUpdater() {
+    // Update stats every second
+    this.intervals.stats = setInterval(() => {
+      if (this.config.enabled && this.state.startTime) {
+        this.state.uptime = Date.now() - this.state.startTime;
+      }
+    }, 1000);
+  }
+
+  // ========== ACTIVITY SIMULATION ==========
+
+  async performActivity(forced = false) {
+    // Allow forced execution even if disabled
+    if (!forced && (!this.config.enabled || !this.state.tabId)) return;
+
+    // If forced but no tab, create one first
+    if (forced && !this.state.tabId) {
+      this.log('No tab found, creating one for forced activity...', 'info');
+      await this.createTab();
+      // Wait a bit for content script to load
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+
+    if (!this.state.tabId) {
+      throw new Error('No tab available for activity');
+    }
+
+    this.log('Performing activity...' + (forced ? ' (FORCED)' : ''), 'activity');
+
+    try {
+      const tab = await chrome.tabs.get(this.state.tabId);
+
+      if (!tab) {
+        throw new Error('Tab not found');
+      }
+
+      // Send activity command to content script
+      await chrome.tabs.sendMessage(this.state.tabId, {
+        action: 'performActivity',
+        mode: this.config.mode,
+        timestamp: Date.now(),
+        forced: forced
+      });
+
+      this.state.activitiesCount++;
+      this.state.lastActivity = Date.now();
+
+      this.log('Activity performed successfully', 'success');
+
+    } catch (error) {
+      this.state.errors++;
+      this.log('Activity error: ' + error.message, 'error');
+
+      // If tab is gone, recreate it
+      if (error.message.includes('tab') || error.message.includes('frame')) {
+        this.log('Tab lost, recreating...', 'warn');
+        await this.createTab();
+      }
+
+      throw error; // Re-throw to let caller handle it
+    }
+  }
+
+  async rotatePage() {
+    if (!this.config.enabled || !this.state.tabId) return;
+
+    try {
+      this.state.currentPageIndex = (this.state.currentPageIndex + 1) % this.pages.length;
+      const newUrl = this.pages[this.state.currentPageIndex];
+
+      await chrome.tabs.update(this.state.tabId, { url: newUrl });
+
+      this.log(`Rotated to: ${newUrl}`, 'info');
+
+      // Wait for new page to load
+      await this.waitForTabLoad(this.state.tabId);
+
+    } catch (error) {
+      this.state.errors++;
+      this.log('Rotation error: ' + error.message, 'error');
+    }
+  }
+
+  // ========== CONFIGURATION ==========
+
+  async updateConfig(newConfig) {
+    const wasEnabled = this.config.enabled;
+    const oldMode = this.config.mode;
+
+    this.config = { ...this.config, ...newConfig };
+    await this.saveSettings();
+
+    this.log('Configuration updated', 'info');
+
+    // If mode changed and system is running, restart intervals
+    if (wasEnabled && oldMode !== this.config.mode) {
+      this.log('Mode changed, restarting intervals...', 'info');
+
+      // Clear old intervals
+      if (this.intervals.activity) {
+        clearTimeout(this.intervals.activity);
+        clearInterval(this.intervals.rotation);
+      }
+
+      // Start new intervals with new mode
+      this.startActivityLoop();
+      this.startRotationLoop();
+    }
+  }
+
+  // ========== UTILITY METHODS ==========
+
+  getState() {
+    return {
+      config: this.config,
+      state: {
+        ...this.state,
+        currentPage: this.pages[this.state.currentPageIndex],
+        isRunning: this.config.enabled,
+        uptimeFormatted: this.formatUptime(this.state.uptime)
+      },
+      modeSettings: this.modeSettings[this.config.mode]
+    };
+  }
+
+  resetStats() {
+    this.state.activitiesCount = 0;
+    this.state.errors = 0;
+    this.state.tabCrashes = 0;
+    this.state.uptime = 0;
+    this.state.startTime = this.config.enabled ? Date.now() : null;
+    this.saveSettings();
+    this.log('Statistics reset', 'info');
+  }
+
+  formatUptime(ms) {
+    if (!ms) return '0s';
+
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (days > 0) return `${days}d ${hours % 24}h`;
+    if (hours > 0) return `${hours}h ${minutes % 60}m`;
+    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+    return `${seconds}s`;
+  }
+
+  updateBadge() {
+    if (this.config.enabled) {
+      chrome.action.setBadgeText({ text: 'ON' });
+      chrome.action.setBadgeBackgroundColor({ color: '#1DBF73' });
+    } else {
+      chrome.action.setBadgeText({ text: '' });
+    }
+  }
+
+  handleTabRemoved(tabId) {
+    if (tabId === this.state.tabId && this.config.enabled) {
+      this.log('Keep-Alive tab closed unexpectedly', 'warn');
+      this.state.tabId = null;
+      this.state.tabCrashes++;
+
+      if (this.config.autoRestart) {
+        this.log('Auto-restarting tab in 5 seconds...', 'info');
+        setTimeout(() => {
+          if (this.config.enabled && !this.state.tabId) {
+            this.createTab();
+          }
+        }, 5000);
+      }
+    }
+  }
+
+  log(message, level = 'info') {
+    const timestamp = new Date().toLocaleTimeString();
+    const prefix = '[KeepAlive Pro]';
+    const emoji = {
+      system: '⚙️',
+      info: 'ℹ️',
+      success: '✅',
+      warn: '⚠️',
+      error: '❌',
+      activity: '🔄',
+      debug: '🔍'
+    }[level] || 'ℹ️';
+
+    console.log(`${emoji} ${prefix} [${timestamp}] ${message}`);
   }
 }
 
-// ==================== ALARM HANDLERS ====================
+// ============================================================================
+// INITIALIZE
+// ============================================================================
 
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'activitySimulation') {
-    simulateActivity();
-  } else if (alarm.name === 'pageRotation') {
-    rotatePage();
-  } else if (alarm.name === 'microActivity') {
-    simulateMicroActivity();
-  }
-});
+const keepAlivePro = new FiverrKeepAlivePro();
 
-// ==================== TAB MONITORING ====================
-
-// Se l'utente chiude la tab keep-alive, ricreala
-chrome.tabs.onRemoved.addListener((tabId) => {
-  if (tabId === keepAliveTabId && isEnabled) {
-    console.log('[KEEP-ALIVE] Tab closed by user, starting recovery...');
-    keepAliveTabId = null;
-    pageChangeInProgress = false;
-    
-    // Ritardo più breve per recupero rapido
-    setTimeout(() => recoverKeepAliveTab(), 1000);
-  }
-});
-
-// ==================== NOTIFICATIONS ====================
-
-async function sendNotification(title, message) {
-  chrome.notifications.create({
-    type: 'basic',
-    iconUrl: 'icon.png',
-    title: title,
-    message: message
-  });
-}
-
-// ==================== DEBUG ====================
-
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'getStatus') {
-    sendResponse({
-      enabled: isEnabled,
-      tabId: keepAliveTabId,
-      currentPage: FIVERR_PAGES[currentPageIndex],
-      pageChangeInProgress: pageChangeInProgress,
-      lastUserInteraction: lastUserInteractionTime
-    });
+// Handle extension installation/update
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason === 'install') {
+    keepAlivePro.log('Extension installed successfully!', 'system');
+  } else if (details.reason === 'update') {
+    keepAlivePro.log('Extension updated to v7.0.0', 'system');
   }
 });

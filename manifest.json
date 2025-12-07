@@ -1,14 +1,11 @@
 {
   "manifest_version": 3,
   "name": "Fiverr Keep-Alive Pro",
-  "version": "4.0.0",
-  "description": "Rimani sempre online su Fiverr con simulazione attività reale",
+  "version": "7.5.0",
+  "description": "Sistema ultra-avanzato per mantenere presenza online garantita su Fiverr con simulazioni ultra-realistiche, multi-layer keep-alive e dashboard professionale",
   "permissions": [
     "storage",
-    "alarms",
-    "notifications",
-    "tabs",
-    "scripting"
+    "tabs"
   ],
   "host_permissions": [
     "*://*.fiverr.com/*"

@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fiverr Keep-Alive Pro - Dashboard</title>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <div class="container">
+      <div class="header-content">
+        <div class="logo-section">
+          <div class="logo-icon">⚡</div>
+          <div class="logo-text">
+            <h1>Fiverr Keep-Alive Pro</h1>
+            <p class="version">Dashboard v7.5.0</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <div class="status-display" id="globalStatus">
+            <span class="status-dot"></span>
+            <span class="status-text">Sistema Inattivo</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <div class="container">
+
+      <!-- Quick Control Section -->
+      <section class="control-section">
+        <div class="control-card">
+          <div class="card-header">
+            <h2>Controllo Rapido</h2>
+            <label class="master-switch">
+              <input type="checkbox" id="masterToggle">
+              <span class="switch-slider">
+                <span class="switch-label off">OFF</span>
+                <span class="switch-label on">ON</span>
+              </span>
+            </label>
+          </div>
+
+          <div class="mode-selector-grid">
+            <div class="mode-card" data-mode="stealth">
+              <div class="mode-icon">🥷</div>
+              <h3>Stealth</h3>
+              <p>Attività discrete<br>45-90s intervallo</p>
+              <div class="mode-badge">Invisibile</div>
+            </div>
+            <div class="mode-card active" data-mode="balanced">
+              <div class="mode-icon">⚖️</div>
+              <h3>Balanced</h3>
+              <p>Equilibrio perfetto<br>25-45s intervallo</p>
+              <div class="mode-badge">Consigliato</div>
+            </div>
+            <div class="mode-card" data-mode="aggressive">
+              <div class="mode-icon">🚀</div>
+              <h3>Aggressive</h3>
+              <p>Massima presenza<br>15-30s intervallo</p>
+              <div class="mode-badge">Massimo</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Statistics Grid -->
+      <section class="stats-section">
+        <h2 class="section-title">Statistiche Real-Time</h2>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-icon">⏱️</span>
+              <span class="stat-label">Uptime</span>
+            </div>
+            <div class="stat-value" id="uptimeValue">0s</div>
+            <div class="stat-footer">Tempo attivo</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-icon">🔄</span>
+              <span class="stat-label">Attività</span>
+            </div>
+            <div class="stat-value" id="activitiesValue">0</div>
+            <div class="stat-footer">Simulazioni eseguite</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-icon">📄</span>
+              <span class="stat-label">Pagina</span>
+            </div>
+            <div class="stat-value small" id="currentPageValue">-</div>
+            <div class="stat-footer">Pagina corrente</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-icon">⚠️</span>
+              <span class="stat-label">Errori</span>
+            </div>
+            <div class="stat-value" id="errorsValue">0</div>
+            <div class="stat-footer">Errori rilevati</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-icon">🔥</span>
+              <span class="stat-label">Ultima Attività</span>
+            </div>
+            <div class="stat-value small" id="lastActivityValue">Mai</div>
+            <div class="stat-footer">Tempo trascorso</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-icon">💥</span>
+              <span class="stat-label">Tab Crashes</span>
+            </div>
+            <div class="stat-value" id="crashesValue">0</div>
+            <div class="stat-footer">Auto-recuperati</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Two Column Layout -->
+      <div class="two-column-layout">
+
+        <!-- Left Column -->
+        <div class="left-column">
+
+          <!-- Quick Actions -->
+          <section class="actions-section">
+            <h2 class="section-title">Azioni Rapide</h2>
+            <div class="actions-grid">
+              <button class="action-button primary" id="forceActivityBtn" disabled>
+                <span class="btn-icon">🔄</span>
+                <div class="btn-content">
+                  <span class="btn-title">Forza Attività</span>
+                  <span class="btn-subtitle">Esegui ora</span>
+                </div>
+              </button>
+
+              <button class="action-button primary" id="forceRotationBtn" disabled>
+                <span class="btn-icon">🔀</span>
+                <div class="btn-content">
+                  <span class="btn-title">Cambia Pagina</span>
+                  <span class="btn-subtitle">Rotazione manuale</span>
+                </div>
+              </button>
+
+              <button class="action-button secondary" id="resetStatsBtn">
+                <span class="btn-icon">📊</span>
+                <div class="btn-content">
+                  <span class="btn-title">Reset Stats</span>
+                  <span class="btn-subtitle">Azzera statistiche</span>
+                </div>
+              </button>
+
+              <button class="action-button secondary" id="openFiverrBtn">
+                <span class="btn-icon">🌐</span>
+                <div class="btn-content">
+                  <span class="btn-title">Apri Fiverr</span>
+                  <span class="btn-subtitle">Nuova tab</span>
+                </div>
+              </button>
+            </div>
+          </section>
+
+          <!-- Activity Log -->
+          <section class="log-section">
+            <div class="log-header">
+              <h2 class="section-title">Activity Log</h2>
+              <button class="clear-log-btn" id="clearLogBtn">Cancella</button>
+            </div>
+            <div class="log-container" id="logContainer">
+              <div class="log-entry info">
+                <span class="log-time">--:--:--</span>
+                <span class="log-message">Sistema pronto. Attiva il keep-alive per iniziare.</span>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- Right Column -->
+        <div class="right-column">
+
+          <!-- Settings -->
+          <section class="settings-section">
+            <h2 class="section-title">Impostazioni Avanzate</h2>
+            <div class="settings-list">
+
+              <div class="setting-item">
+                <div class="setting-info">
+                  <div class="setting-title">Auto-Restart</div>
+                  <div class="setting-description">Riavvia automaticamente in caso di errore o crash della tab</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="autoRestartToggle" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+
+              <div class="setting-item">
+                <div class="setting-info">
+                  <div class="setting-title">Smart Rotation</div>
+                  <div class="setting-description">Rotazione intelligente tra le pagine di Fiverr</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="smartRotationToggle" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+
+              <div class="setting-item">
+                <div class="setting-info">
+                  <div class="setting-title">Notifiche</div>
+                  <div class="setting-description">Mostra notifiche per eventi importanti</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="notificationsToggle" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+
+              <div class="setting-item">
+                <div class="setting-info">
+                  <div class="setting-title">Logging Dettagliato</div>
+                  <div class="setting-description">Mostra tutti i log delle attività nella dashboard</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="detailedLoggingToggle" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+
+            </div>
+          </section>
+
+          <!-- Info Card -->
+          <section class="info-section">
+            <h2 class="section-title">Informazioni Sistema</h2>
+            <div class="info-card">
+              <div class="info-item">
+                <span class="info-icon">✅</span>
+                <span class="info-text">8 tipi di simulazioni ultra-realistiche</span>
+              </div>
+              <div class="info-item">
+                <span class="info-icon">🛡️</span>
+                <span class="info-text">3 layer di keep-alive indipendenti</span>
+              </div>
+              <div class="info-item">
+                <span class="info-icon">🔄</span>
+                <span class="info-text">Auto-recovery da qualsiasi errore</span>
+              </div>
+              <div class="info-item">
+                <span class="info-icon">💾</span>
+                <span class="info-text">Session storage costantemente aggiornato</span>
+              </div>
+              <div class="info-item">
+                <span class="info-icon">👁️</span>
+                <span class="info-text">Rileva attività utente e non interferisce</span>
+              </div>
+              <div class="info-item">
+                <span class="info-icon">🔒</span>
+                <span class="info-text">Nessun dato raccolto o condiviso</span>
+              </div>
+            </div>
+          </section>
+
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <p>Fiverr Keep-Alive Pro v7.5.0 - Sistema Ultra-Avanzato per Presenza Online Garantita</p>
+      <p class="footer-note">Funziona 24/7 anche in background - Completamente automatico</p>
+    </div>
+  </footer>
+
+  <!-- Notification Container -->
+  <div id="notificationContainer"></div>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>
